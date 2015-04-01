@@ -5,6 +5,7 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/calib3d/calib3d.hpp>
 #include <iostream>
+#include "SCalibData.h"
 
 using namespace cv;
 using namespace std;
@@ -99,6 +100,11 @@ int main(int argc, char **argv){
     Mat canvas(h, w*2, CV_8UC3);
     initUndistortRectifyMap(cameraMatLeft, distCoefLeft, R1, P1, imageLeft.size(), CV_32FC1, map1x, map1y);
     initUndistortRectifyMap(cameraMatRight, distCoefRight, R2, P2, imageRight.size(), CV_32FC1, map2x, map2y);
+    //Lo guardamos todo en un fichero yaml
+    FileStorage fs("stereo_calib.yml", FileStorage::WRITE);
+    SCalibData calibData(cameraMatLeft, cameraMatRight, distCoefLeft, distCoefRight, R, T, E, F, R1, R2, P1, P2, Q, map1x, map1y, map2x, map2y);
+    calibData.write(fs);
+    fs.release();
     while(true){
         capLeft >> imageLeft;
         capRight >> imageRight;
