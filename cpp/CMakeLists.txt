@@ -1,4 +1,6 @@
 cmake_minimum_required(VERSION 2.8)
 set( CMAKE_EXPORT_COMPILE_COMMANDS ON )
+set( CMAKE_BUILD_TYPE DEBUG )
 add_subdirectory (calibrateStereo)
+add_subdirectory (stereo_matchSGBM)
 add_subdirectory (lib)

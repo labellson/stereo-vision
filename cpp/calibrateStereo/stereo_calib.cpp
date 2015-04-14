@@ -89,8 +89,9 @@ int main(int argc, char **argv){
     //Calibramos el conjunto bifocal
     stereoCalibrate(objectPoints, imagePointsLeft, imagePointsRight, cameraMatLeft, distCoefLeft, cameraMatRight, distCoefRight, imageLeft.size(), R, T, E, F, TermCriteria(TermCriteria::COUNT+TermCriteria::EPS, 30, 1e-6), CV_CALIB_SAME_FOCAL_LENGTH | CV_CALIB_ZERO_TANGENT_DIST);
     // Matriz de rectificacion (Rotacion) izquierda, Mismo derecha, Matriz proyeccion izq, Matriz proyeccion der, Matriz disparidad a profundidad
-    Mat R1, R2, P1, P2, Q;
-    stereoRectify(cameraMatLeft, distCoefLeft, cameraMatRight, distCoefRight, imageLeft.size(), R, T, R1, R2, P1, P2, Q);
+    Mat R1, R2, P1, P2, Q; 
+    Rect roi[2];
+    stereoRectify(cameraMatLeft, distCoefLeft, cameraMatRight, distCoefRight, imageLeft.size(), R, T, R1, R2, P1, P2, Q, CALIB_ZERO_DISPARITY, -1, Size(0,0), &roi[0], &roi[1]);
     //Matrices de mapeo para remap
     Mat map1x, map1y, map2x, map2y;
     //Imagenes rectificadas y sin distorsion
@@ -102,7 +103,7 @@ int main(int argc, char **argv){
     initUndistortRectifyMap(cameraMatRight, distCoefRight, R2, P2, imageRight.size(), CV_32FC1, map2x, map2y);
     //Lo guardamos todo en un fichero yaml
     FileStorage fs("stereo_calib.yml", FileStorage::WRITE);
-    SCalibData calibData(cameraMatLeft, cameraMatRight, distCoefLeft, distCoefRight, R, T, E, F, R1, R2, P1, P2, Q, map1x, map1y, map2x, map2y);
+    SCalibData calibData(cameraMatLeft, cameraMatRight, distCoefLeft, distCoefRight, R, T, E, F, R1, R2, P1, P2, Q, roi[0], roi[1]);
     calibData.write(fs);
     fs.release();
     while(true){
@@ -112,6 +113,7 @@ int main(int argc, char **argv){
         remap(imageRight, imageU[1], map2x, map2y, INTER_LINEAR, BORDER_CONSTANT, Scalar());
         for( int k=0; k < 2; k++){
             Mat canvasPart(canvas, Rect(w*k, 0, w, h));
+            rectangle(imageU[k], roi[k], Scalar(0, 255, 0), 4);
             resize(imageU[k], canvasPart, canvasPart.size(), 0, 0, INTER_AREA);
         }
         for (int j=0; j < canvas.rows; j+=16){
