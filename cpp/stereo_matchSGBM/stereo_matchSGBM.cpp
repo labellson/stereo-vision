@@ -39,6 +39,7 @@ int main(int argc, char **argv){
     int disp12MaxDiff = 1;
     int preFilterCap = 63;
     int speckleRange = 32;
+    int thresholdRange = 0;
     //Trackbars
     String trackWindow = "Settings";
     namedWindow(trackWindow, CV_WINDOW_AUTOSIZE);
@@ -50,10 +51,18 @@ int main(int argc, char **argv){
     createTrackbar("disp12MaxDiff", trackWindow, &disp12MaxDiff, 12);
     createTrackbar("preFilterCap", trackWindow, &preFilterCap, 100);
     createTrackbar("speckleRange", trackWindow, &speckleRange, 128);
+    createTrackbar("threshold", trackWindow, &thresholdRange, 255);
     //Rectificar camara
     initUndistortRectifyMap(calibData.CM[0], calibData.D[0],calibData.r[0], calibData.P[0], image[0].size(), CV_32FC1, map1x, map1y);
     initUndistortRectifyMap(calibData.CM[1], calibData.D[1],calibData.r[1], calibData.P[1], image[0].size(), CV_32FC1, map2x, map2y);
-    //Matrices grises
+    //Se utilazaran los roi para el mapa de disparidad
+    int roi_x = calibData.roi[0].x > calibData.roi[1].x ? calibData.roi[0].x : calibData.roi[1].y;
+    int roi_y = calibData.roi[0].y > calibData.roi[1].y ? calibData.roi[0].y : calibData.roi[1].y;
+    int roi_width = calibData.roi[0].width < calibData.roi[1].width ? calibData.roi[0].width : calibData.roi[1].width;
+    int roi_height = calibData.roi[0].height < calibData.roi[1].height ? calibData.roi[0].height : calibData.roi[1].height;
+    Rect roi(roi_x, roi_y, roi_width, roi_height);
+    //Se hara threshold para calcular el mapa binario
+    Mat dispT;
     while(true){
         if(rend){
             cap1 >> image[0];
@@ -76,12 +85,18 @@ int main(int argc, char **argv){
         //remap(image[1], imageU[1], calibData.map[1][0], calibData.map[1][1], INTER_LINEAR, BORDER_CONSTANT, Scalar());
         remap(image[0], imageU[0], map1x, map1y, INTER_LINEAR, BORDER_CONSTANT, Scalar());
         remap(image[1], imageU[1], map2x, map2y, INTER_LINEAR, BORDER_CONSTANT, Scalar());
+        //Cambiamos a escala de grises
         cvtColor(imageU[0], imageUG[0], CV_BGR2GRAY);
         cvtColor(imageU[1], imageUG[1], CV_BGR2GRAY);
+        //Calculo del mapa de disparidad
         sgbm(imageUG[0], imageUG[1], disp); //Tiene mas parametros
+        //Es necesario normalizar el mapa de disparidad
         normalize(disp, disp8, 0, 255, CV_MINMAX, CV_8U);
+        //Mat disp8roi(disp8, roi);
+        threshold(disp8, dispT, thresholdRange, 255, 0);
         imshow("Left", imageU[0]);
         imshow("Right", imageU[1]);
+        imshow("Mapa Binario", dispT);
         imshow("Disparidad", disp8);
         if(waitKey(1) == 1048603) break;
         if(waitKey(1) == 1048690) rend = !rend;
