@@ -1,4 +1,5 @@
 project( StereoMatchSGBM )
 find_package( OpenCV REQUIRED )
+find_package( opencvblobslib REQUIRED )
 add_executable( stereo_matchSGBM stereo_matchSGBM.cpp )
-target_link_libraries( stereo_matchSGBM ${OpenCV_LIBS} SCalibData )
+target_link_libraries( stereo_matchSGBM ${OpenCV_LIBS} ${OPENCVBLOBSLIB_LIBRARIES} SCalibData )

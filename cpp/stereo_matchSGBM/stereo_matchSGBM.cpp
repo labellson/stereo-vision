@@ -4,10 +4,16 @@
 #include <opencv2/calib3d/calib3d.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <iostream>
+#include <opencvblobslib/BlobResult.h>
+#include <opencvblobslib/blob.h>
+#include <opencvblobslib/BlobOperators.h>
 #include "SCalibData.h"
 
 using namespace cv;
 using namespace std;
+
+// disp_src Matriz de disparidad thresholdeada, dst matriz de destino
+void calculate_blobs(Mat binary_map_src, Mat& dst);
 
 int main(int argc, char **argv){
     //Pulsar r para resumir la captura de video
@@ -62,8 +68,8 @@ int main(int argc, char **argv){
     int roi_height = calibData.roi[0].height < calibData.roi[1].height ? calibData.roi[0].height : calibData.roi[1].height;
     Rect roi(roi_x, roi_y, roi_width, roi_height);
     //Se hara threshold para calcular el mapa binario
-    Mat dispT;
     while(true){
+    Mat dispT, blobs;
         if(rend){
             cap1 >> image[0];
             cap2 >> image[1];
@@ -94,11 +100,28 @@ int main(int argc, char **argv){
         normalize(disp, disp8, 0, 255, CV_MINMAX, CV_8U);
         //Mat disp8roi(disp8, roi);
         threshold(disp8, dispT, thresholdRange, 255, 0);
+        calculate_blobs(dispT, blobs);
         imshow("Left", imageU[0]);
         imshow("Right", imageU[1]);
         imshow("Mapa Binario", dispT);
         imshow("Disparidad", disp8);
+        imshow("Blobs", blobs);
         if(waitKey(1) == 1048603) break;
         if(waitKey(1) == 1048690) rend = !rend;
+    }
+}
+
+void calculate_blobs(Mat binary_map_src, Mat& dst){
+    CBlobResult blobs(binary_map_src);
+    CBlob *blob;
+    int min_area = 80;
+
+    CBlobResult blobs_filtered;
+    blobs.Filter(blobs_filtered, FilterAction::FLT_EXCLUDE,  CBlobGetArea(), FilterCondition::FLT_LESS, min_area);
+
+    dst = cvCreateMat(binary_map_src.size().height, binary_map_src.size().width, CV_8UC3);
+    for(int i=0; i < blobs_filtered.GetNumBlobs(); i++){
+        blob = blobs_filtered.GetBlob(i);
+        blob->FillBlob(dst, Scalar(rand() % 255, rand() % 255, rand() % 255));
     }
 }
