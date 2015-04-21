@@ -4,6 +4,7 @@
 #include <opencv2/calib3d/calib3d.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <iostream>
+#include <stdlib.h>
 #include <opencvblobslib/BlobResult.h>
 #include <opencvblobslib/blob.h>
 #include <opencvblobslib/BlobOperators.h>
@@ -13,14 +14,17 @@ using namespace cv;
 using namespace std;
 
 //Strings Trackbars y WinNames
-String trackWindow = "Settings";
+String trackWindow = "Settings", disparityWindow = "Disparidad";
 String sad_win_size_trackbar = "SAD Window Size";
+String pre_filter_size_trackbar = "Pre-Filter Size";
+
+//Parametros Camara
+SCalibData calibData;
 
 //Parametros de ajuste
-int sadWindowsize = 9;
-int sadWindowsize_tmp = sadWindowsize;
+int sadWindowsize = 9, sadWindowsize_tmp = sadWindowsize;
 int numberOfDisparities = 7;
-int preFilterSize = 5;
+int preFilterSize = 5, preFilterSize_tmp = preFilterSize;
 int preFilterCap = 31;
 int minDisparity = 0;
 int textureThreshold = 10;
@@ -36,9 +40,28 @@ void sad_window_size_callback(int v, void*){
     if(v % 2 == 0){
         if(v < sadWindowsize_tmp) sadWindowsize--;
         else sadWindowsize++;
+        if(v == -1) sadWindowsize = 1;
         sadWindowsize_tmp = sadWindowsize;
         setTrackbarPos(sad_win_size_trackbar, trackWindow, sadWindowsize);
     }
+}
+
+void pre_filter_size_callback(int v, void*){
+    if(v % 2 == 0){
+        if(v <  preFilterSize_tmp) preFilterSize--;
+        else preFilterSize++;
+        if(v < 5) preFilterSize = 5;
+        preFilterSize_tmp = preFilterSize;
+        setTrackbarPos(pre_filter_size_trackbar, trackWindow, preFilterSize);
+    }
+}
+
+static void disp_window_mouse_callback(int event, int x, int y, int flags, void* userdata){
+    if(event != EVENT_LBUTTONDOWN) return;
+    cout << "x: " << x << " y: " << y << endl;
+    Mat* depth_map = (Mat*) userdata;
+    Vec3f vec = depth_map->at<Vec3f>(y,x);
+    cout << "x: " << vec[0] << " y: " << vec[1] << " z: " << vec[2] << endl;
 }
 
 // disp_src Matriz de disparidad thresholdeada, dst matriz de destino
@@ -47,13 +70,12 @@ void calculate_blobs(Mat binary_map_src, Mat& dst);
 int main(int argc, char **argv){
     //Pulsar r para resumir la captura de video
     bool rend =  true, go = true;
-    SCalibData calibData;
     FileStorage fs("../resources/stereo_calib.yml", FileStorage::READ);
     calibData.read(fs);
     fs.release();
-    VideoCapture cap1(0);
-    VideoCapture cap2(1);
-    Mat image[2], imageU[2], imageUG[2], disp, disp8;
+    VideoCapture cap1(1);
+    VideoCapture cap2(0);
+    Mat image[2], imageU[2], imageUG[2], disp, disp8, depth_map;
     Mat map1x, map1y, map2x, map2y;
     cap1 >> image[0];
     StereoBM bm;
@@ -64,23 +86,27 @@ int main(int argc, char **argv){
 
     //Trackbars
     namedWindow(trackWindow, CV_WINDOW_AUTOSIZE);
-    createTrackbar("Pre-Filter Size", trackWindow, &preFilterSize, 255);
+    namedWindow(disparityWindow, CV_WINDOW_AUTOSIZE);
+    createTrackbar(pre_filter_size_trackbar, trackWindow, &preFilterSize, 255, pre_filter_size_callback);
     createTrackbar("Pre-Filter Cap", trackWindow, &preFilterCap, 63);
     createTrackbar("SAD Window Size", trackWindow, &sadWindowsize, 255, sad_window_size_callback);
     createTrackbar("Min Disp", trackWindow, &minDisparity, 100);
     createTrackbar("Num Disp *16", trackWindow, &numberOfDisparities, 16);
     createTrackbar("Texture Threshold", trackWindow, &textureThreshold, 1000);
     createTrackbar("Uniqueness Ratio", trackWindow, &uniqnessRatio, 255);
-    createTrackbar("Speckle Win Size", trackWindow, &speckleWindowSize, 100);
+    createTrackbar("Speckle Win Size", trackWindow, &speckleWindowSize, 200);
     createTrackbar("Speckle Range", trackWindow, &speckleRange, 100);
     createTrackbar("disp12MaxDiff", trackWindow, &disp12MaxDiff, 100);
     createTrackbar("threshold", trackWindow, &thresholdRange, 255);
+
+    //Callbacks
+    setMouseCallback(disparityWindow, disp_window_mouse_callback, &depth_map);
 
     //Rectificar camara
     initUndistortRectifyMap(calibData.CM[0], calibData.D[0],calibData.r[0], calibData.P[0], image[0].size(), CV_32FC1, map1x, map1y);
     initUndistortRectifyMap(calibData.CM[1], calibData.D[1],calibData.r[1], calibData.P[1], image[0].size(), CV_32FC1, map2x, map2y);
     //Se hara threshold para calcular el mapa binario
-    Mat dispT, blobs;
+    Mat dispT, blobs;//(480, 640, CV_8UC3);
     while(go){
         if(rend){
             cap1 >> image[0];
@@ -109,12 +135,16 @@ int main(int argc, char **argv){
         //Es necesario normalizar el mapa de disparidad
         normalize(disp, disp8, 0, 255, CV_MINMAX, CV_8U);
         threshold(disp8, dispT, thresholdRange, 255, 0);
-        //if(rend) calculate_blobs(dispT, blobs);
-        if(rend) calculate_blobs(disp8, blobs);
+        if(rend) calculate_blobs(dispT, blobs);
+        
+        //Calculo de la coordenada Z de todos los puntos
+        //TODO: Cambiar esto por algo mas logico y eficiente
+        reprojectImageTo3D(disp, depth_map, calibData.Q);
+
         imshow("Left", imageU[0]);
         imshow("Right", imageU[1]);
         imshow("Mapa Binario", dispT);
-        imshow("Disparidad", disp8);
+        imshow(disparityWindow, disp8);
         imshow("Blobs", blobs);
         switch (waitKey(1)){
             case 1048603:
@@ -147,7 +177,9 @@ void calculate_blobs(Mat binary_map_src, Mat& dst){
     CBlobResult blobs_filtered;
     blobs.Filter(blobs_filtered, FilterAction::FLT_EXCLUDE,  CBlobGetArea(), FilterCondition::FLT_LESS, min_area);
 
-    dst = cvCreateMat(binary_map_src.size().height, binary_map_src.size().width, CV_8UC3);
+    //dst(binary_map_src.size().height, binary_map_src.size().width, CV_8UC3);
+    dst.create(binary_map_src.size(), CV_8UC3);
+    dst = Scalar(0);
     for(int i=0; i < blobs_filtered.GetNumBlobs(); i++){
         blob = blobs_filtered.GetBlob(i);
         blob->FillBlob(dst, Scalar(rand() % 255, rand() % 255, rand() % 255));
