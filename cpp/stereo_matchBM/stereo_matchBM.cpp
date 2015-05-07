@@ -4,11 +4,13 @@
 #include <opencv2/calib3d/calib3d.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <iostream>
-#include <stdlib.h>
+#include <string>
 #include <opencvblobslib/BlobResult.h>
 #include <opencvblobslib/blob.h>
 #include <opencvblobslib/BlobOperators.h>
 #include "SCalibData.h"
+
+#define DEBUG 1
 
 using namespace cv;
 using namespace std;
@@ -17,11 +19,12 @@ using namespace std;
 String trackWindow = "Settings", disparityWindow = "Disparidad";
 String sad_win_size_trackbar = "SAD Window Size";
 String pre_filter_size_trackbar = "Pre-Filter Size";
+String min_blob_area_trackbar = "Blob Area";
 
 //Parametros Camara
 SCalibData calibData;
 
-//Parametros de ajuste
+//Parametros de ajuste BM
 int sadWindowsize = 9, sadWindowsize_tmp = sadWindowsize;
 int numberOfDisparities = 7;
 int preFilterSize = 5, preFilterSize_tmp = preFilterSize;
@@ -34,6 +37,9 @@ int speckleRange = 32;
 int disp12MaxDiff = 1;
 int thresholdRange = 0;
 bool minDisparityNeg = false;
+
+//Parametros ajuste Blobs
+int min_blob_area = 80;
 
 //Funciones de callback
 void sad_window_size_callback(int v, void*){
@@ -65,16 +71,27 @@ static void disp_window_mouse_callback(int event, int x, int y, int flags, void*
 }
 
 // disp_src Matriz de disparidad thresholdeada, dst matriz de destino
-void calculate_blobs(Mat binary_map_src, Mat& dst);
+void calculate_blobs(Mat binary_map_src, vector<Rect> &objects, Mat& dst, int min_area=80);
+
+//Calculara la distancia a los objetos y la mostrara
+void calculate_depth(Mat disp, Mat &dst, vector<Rect> objects);
+
+//Leeme: Hay que meter 2 argumentos que seran los numeros de las camaras
+void readme(){
+    cout << "Uso: ./stereo_matchBM <camera0> <camera1>" << endl;
+}
 
 int main(int argc, char **argv){
     //Pulsar r para resumir la captura de video
     bool rend =  true, go = true;
+
+    if(argc < 3){ readme(); return -1; }
+
     FileStorage fs("../resources/stereo_calib.yml", FileStorage::READ);
     calibData.read(fs);
     fs.release();
-    VideoCapture cap1(1);
-    VideoCapture cap2(0);
+    VideoCapture cap1(stoi(argv[1]));
+    VideoCapture cap2(stoi(argv[2]));
     Mat image[2], imageU[2], imageUG[2], disp, disp8, depth_map;
     Mat map1x, map1y, map2x, map2y;
     cap1 >> image[0];
@@ -98,6 +115,7 @@ int main(int argc, char **argv){
     createTrackbar("Speckle Range", trackWindow, &speckleRange, 100);
     createTrackbar("disp12MaxDiff", trackWindow, &disp12MaxDiff, 100);
     createTrackbar("threshold", trackWindow, &thresholdRange, 255);
+    createTrackbar(min_blob_area_trackbar, trackWindow, &min_blob_area, 1000);
 
     //Callbacks
     setMouseCallback(disparityWindow, disp_window_mouse_callback, &depth_map);
@@ -135,11 +153,15 @@ int main(int argc, char **argv){
         //Es necesario normalizar el mapa de disparidad
         normalize(disp, disp8, 0, 255, CV_MINMAX, CV_8U);
         threshold(disp8, dispT, thresholdRange, 255, 0);
-        if(rend) calculate_blobs(dispT, blobs);
+
+        vector<Rect> objects;
+        if(rend) calculate_blobs(dispT, objects, blobs, min_blob_area);
         
         //Calculo de la coordenada Z de todos los puntos
         //TODO: Cambiar esto por algo mas logico y eficiente
         reprojectImageTo3D(disp, depth_map, calibData.Q);
+
+        if(rend) calculate_depth(disp, blobs, objects);
 
         imshow("Left", imageU[0]);
         imshow("Right", imageU[1]);
@@ -169,11 +191,14 @@ int main(int argc, char **argv){
     }
 }
 
-void calculate_blobs(Mat binary_map_src, Mat& dst){
+void calculate_blobs(Mat binary_map_src, vector<Rect> &objects, Mat& dst, int min_area){
+    //Buena y mala idea. rellena huecos, pero causa confusion con otros objetos
+    //dilate(binary_map_src, binary_map_src, Mat());
+    erode(binary_map_src, binary_map_src, Mat());
     CBlobResult blobs(binary_map_src);
     CBlob *blob;
-    int min_area = 80;
 
+    //Filtrar blobs por area
     CBlobResult blobs_filtered;
     blobs.Filter(blobs_filtered, FilterAction::FLT_EXCLUDE,  CBlobGetArea(), FilterCondition::FLT_LESS, min_area);
 
@@ -183,6 +208,39 @@ void calculate_blobs(Mat binary_map_src, Mat& dst){
     for(int i=0; i < blobs_filtered.GetNumBlobs(); i++){
         blob = blobs_filtered.GetBlob(i);
         blob->FillBlob(dst, Scalar(rand() % 255, rand() % 255, rand() % 255));
+        if(blob->MaxY() >= 355){
+            Rect blob_rect = blob->GetBoundingBox();
+            objects.push_back(blob_rect);
+            rectangle(dst, blob_rect, Scalar(0,255,0), 3);
+        }
     }
 }
+
+void calculate_depth(Mat disp, Mat &dst, vector<Rect> objects){
+    Mat depth;
+    vector<Mat> depthC;
+    Vec3f vec;
+    for(int i=0; i < objects.size(); i++){
+        Mat roi(disp, objects[i]);
+        reprojectImageTo3D(roi, depth, calibData.Q);
+
+        split(depth, depthC);
+        float *p, sum=0;
+        int cont =0;
+        for(int k=0;  k < depthC[2].rows; k++){
+            p = depthC[2].ptr<float>(k);
+            for(int j=0; j < depthC[2].cols; j++){
+                if(p[j] > 0){
+                    sum += p[j];
+                    cont++;
+                }
+            }
+        }
+
+        Point anchor(objects[i].x+10, objects[i].y+18);
+        putText(dst, to_string(sum/cont/1000), anchor, FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255,255,255));
+    }
+}
+        
+        
 
