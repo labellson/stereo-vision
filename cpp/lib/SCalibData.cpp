@@ -3,7 +3,7 @@
 SCalibData::SCalibData(){
 }
 
-SCalibData::SCalibData(Mat CM1, Mat CM2, Mat D1, Mat D2, Mat R, Mat T, Mat E, Mat F, Mat R1, Mat R2, Mat P1, Mat P2, Mat Q, Rect roi1, Rect roi2){
+SCalibData::SCalibData(Mat CM1, Mat CM2, Mat D1, Mat D2, Mat R, Mat T, Mat E, Mat F, Mat R1, Mat R2, Mat P1, Mat P2, Mat Q, Rect roi1, Rect roi2, int frame_width, int frame_height){
     CM.push_back(CM1);
     CM.push_back(CM2);
     D.push_back(D1);
@@ -27,6 +27,8 @@ SCalibData::SCalibData(Mat CM1, Mat CM2, Mat D1, Mat D2, Mat R, Mat T, Mat E, Ma
     map.push_back(map2);*/
     roi.push_back(roi1);
     roi.push_back(roi2);
+    this->frame_width = frame_width;
+    this->frame_height = frame_height;
 }
 
 void SCalibData::fillVector(vector<Mat> &v, FileNode &n){
@@ -51,6 +53,8 @@ void SCalibData::write(FileStorage& fs) const{
     //fs << "map1" << "{" << "x" << map[0][0] << "y" << map[0][1] << "}";
     //fs << "map2" << "{" << "x" << map[1][0] << "y" << map[1][1] << "}";
     fs << "roi" << "{" << "l" << roi[0] << "r" << roi[1] << "}";
+    fs << "frame_width" << frame_width;
+    fs << "frame_height" << frame_height;
 }
 
 void SCalibData::read(const FileStorage& fs){
@@ -73,6 +77,8 @@ void SCalibData::read(const FileStorage& fs){
     roi.push_back(aux);
     n["r"] >> aux;
     roi.push_back(aux);
+    frame_width = fs["frame_width"];
+    frame_height = fs["frame_height"];
     /*n = fs["map1"];
     vector<Mat> map1;
     fillVector(map1, n);

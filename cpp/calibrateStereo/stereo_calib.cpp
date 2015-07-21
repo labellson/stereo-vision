@@ -15,6 +15,8 @@ int main(int argc, char **argv){
     int numCornersHor;
     int numCornersVer;
     int cornerSize;
+    int frame_width = argc < 3 ? 640 : stoi(argv[1]);
+    int frame_height = argc < 3 ? 480 : stoi(argv[2]);
     // Matrices importantes
     Mat cameraMatLeft = Mat::eye(3, 3, CV_64F);
     Mat cameraMatRight = Mat::eye(3, 3, CV_64F);
@@ -34,11 +36,11 @@ int main(int argc, char **argv){
     cout << "Introduce la camara izquierda: "; cin >> camIzq;
     cout << "Introduce la camara derecha: "; cin >> camDer;
     VideoCapture capLeft(camIzq);
-    //capLeft.set(CV_CAP_PROP_FRAME_WIDTH, 320);
-    //capLeft.set(CV_CAP_PROP_FRAME_HEIGHT, 240);
+    capLeft.set(CV_CAP_PROP_FRAME_WIDTH, frame_width);
+    capLeft.set(CV_CAP_PROP_FRAME_HEIGHT, frame_height);
     VideoCapture capRight(camDer);
-    //capRight.set(CV_CAP_PROP_FRAME_WIDTH, 320);
-    //capRight.set(CV_CAP_PROP_FRAME_HEIGHT, 240);
+    capRight.set(CV_CAP_PROP_FRAME_WIDTH, frame_width);
+    capRight.set(CV_CAP_PROP_FRAME_HEIGHT, frame_height);
     if(!capLeft.isOpened() || !capRight.isOpened()){ cout << "La camara no se pudo abrir" << endl; return -1;}
     //Vectores que guardan los puntos en 3D y 2D correspondientes a las esquinas del chess en cada imagen
     vector<vector<Point3f> > objectPoints;
@@ -102,8 +104,8 @@ int main(int argc, char **argv){
     initUndistortRectifyMap(cameraMatLeft, distCoefLeft, R1, P1, imageLeft.size(), CV_32FC1, map1x, map1y);
     initUndistortRectifyMap(cameraMatRight, distCoefRight, R2, P2, imageRight.size(), CV_32FC1, map2x, map2y);
     //Lo guardamos todo en un fichero yaml
-    FileStorage fs("stereo_calib.yml", FileStorage::WRITE);
-    SCalibData calibData(cameraMatLeft, cameraMatRight, distCoefLeft, distCoefRight, R, T, E, F, R1, R2, P1, P2, Q, roi[0], roi[1]);
+    FileStorage fs("stereo_calib_"+to_string(frame_height)+".yml", FileStorage::WRITE);
+    SCalibData calibData(cameraMatLeft, cameraMatRight, distCoefLeft, distCoefRight, R, T, E, F, R1, R2, P1, P2, Q, roi[0], roi[1], frame_width, frame_height);
     calibData.write(fs);
     fs.release();
     while(true){

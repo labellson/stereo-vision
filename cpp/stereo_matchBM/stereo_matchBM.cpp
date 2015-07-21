@@ -10,7 +10,7 @@
 #include <opencvblobslib/BlobOperators.h>
 #include "SCalibData.h"
 
-#define DEBUG 1
+#define DEBUG 0
 
 using namespace cv;
 using namespace std;
@@ -78,20 +78,28 @@ void calculate_depth(Mat disp, Mat &dst, vector<Rect> objects);
 
 //Leeme: Hay que meter 2 argumentos que seran los numeros de las camaras
 void readme(){
-    cout << "Uso: ./stereo_matchBM <camera0> <camera1>" << endl;
+    cout << "Uso: ./stereo_matchBM <camera0> <camera1> <calib_file>" << endl;
 }
 
 int main(int argc, char **argv){
     //Pulsar r para resumir la captura de video
     bool rend =  true, go = true;
 
-    if(argc < 3){ readme(); return -1; }
+    if(argc < 4){ readme(); return -1; }
 
-    FileStorage fs("../resources/stereo_calib.yml", FileStorage::READ);
+    FileStorage fs(argv[3], FileStorage::READ);
+    if(!fs.isOpened()) { cout << "ERROR! El fichero de calibracion no se pudo abrir" << endl; return -1; }
     calibData.read(fs);
     fs.release();
+
     VideoCapture cap1(stoi(argv[1]));
     VideoCapture cap2(stoi(argv[2]));
+    if(!(cap1.isOpened() || cap2.isOpened())) { cout << "ERROR! La camara no puso ser abierta" << endl; return -1; }
+    cap1.set(CV_CAP_PROP_FRAME_WIDTH, calibData.frame_width);
+    cap1.set(CV_CAP_PROP_FRAME_HEIGHT, calibData.frame_height);
+    cap2.set(CV_CAP_PROP_FRAME_WIDTH, calibData.frame_width);
+    cap2.set(CV_CAP_PROP_FRAME_HEIGHT, calibData.frame_height);
+
     Mat image[2], imageU[2], imageUG[2], disp, disp8, depth_map;
     Mat map1x, map1y, map2x, map2y;
     cap1 >> image[0];
@@ -118,7 +126,7 @@ int main(int argc, char **argv){
     createTrackbar(min_blob_area_trackbar, trackWindow, &min_blob_area, 1000);
 
     //Callbacks
-    setMouseCallback(disparityWindow, disp_window_mouse_callback, &depth_map);
+    if(DEBUG) setMouseCallback(disparityWindow, disp_window_mouse_callback, &depth_map);
 
     //Rectificar camara
     initUndistortRectifyMap(calibData.CM[0], calibData.D[0],calibData.r[0], calibData.P[0], image[0].size(), CV_32FC1, map1x, map1y);
@@ -126,6 +134,7 @@ int main(int argc, char **argv){
     //Se hara threshold para calcular el mapa binario
     Mat dispT, blobs;//(480, 640, CV_8UC3);
     while(go){
+        double t = (double) getTickCount();
         if(rend){
             cap1 >> image[0];
             cap2 >> image[1];
@@ -159,7 +168,7 @@ int main(int argc, char **argv){
         
         //Calculo de la coordenada Z de todos los puntos
         //TODO: Cambiar esto por algo mas logico y eficiente
-        reprojectImageTo3D(disp, depth_map, calibData.Q);
+        if(DEBUG) reprojectImageTo3D(disp, depth_map, calibData.Q);
 
         if(rend) calculate_depth(disp, blobs, objects);
 
@@ -188,6 +197,7 @@ int main(int argc, char **argv){
             default:
                 break;
         }
+    cout << "Tiempo ciclo: " << ((double)getTickCount() - t)/getTickFrequency() << "s" << endl;
     }
 }
 
@@ -208,7 +218,8 @@ void calculate_blobs(Mat binary_map_src, vector<Rect> &objects, Mat& dst, int mi
     for(int i=0; i < blobs_filtered.GetNumBlobs(); i++){
         blob = blobs_filtered.GetBlob(i);
         blob->FillBlob(dst, Scalar(rand() % 255, rand() % 255, rand() % 255));
-        if(blob->MaxY() >= 355){
+        //if(blob->MaxY() >= 355){ /*Para 480*/
+        if(blob->MaxY() >= 175){ /*Para 240*/
             Rect blob_rect = blob->GetBoundingBox();
             objects.push_back(blob_rect);
             rectangle(dst, blob_rect, Scalar(0,255,0), 3);
