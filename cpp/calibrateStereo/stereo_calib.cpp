@@ -4,19 +4,62 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/calib3d/calib3d.hpp>
+#include <unistd.h>
 #include <iostream>
 #include "SCalibData.h"
 
 using namespace cv;
 using namespace std;
 
+//Variables globales
+int frame_width = 640;
+int frame_height = 480;
+bool full_auto = false;
+
+//Argumentos
+String full_auto_arg = "-a";
+String help_arg = "-h";
+
+void readme(){
+    cout << "Usage: stereo_calib [width] [height] [-a]" << endl;
+    cout << "For help use -h" << endl;
+    exit(0);
+}
+
+void man(){
+    cout << "Este programa calibra un sistema estereo, utilizando un tablero de ajedrez" << endl << endl;
+    cout << "\t-a" << endl << "\t\tActiva el modo automatico para capturar esquinas" << endl;
+    exit(0);
+}
+
+void args(int argc, char **argv){
+    if(argc == 1) return;
+    char *frame_width_str = NULL;
+    for(int i=1; i < argc; i++){
+        if(argv[i][0] != '-'){
+            if(!frame_width_str){
+                frame_width_str = argv[i];
+                frame_width = stoi(frame_width_str);
+            }else{
+                frame_height = stoi(argv[i]);
+            }
+        }else if(full_auto_arg.compare(argv[i]) == 0){
+            full_auto = true;
+        }else if(help_arg.compare(argv[i]) == 0){
+            man() ;
+        }else{
+            readme();
+        }
+    }
+}
+
 int main(int argc, char **argv){
+    args(argc, argv);
+    cout << "Resolucion: " << frame_width << "x" << frame_height << endl; 
     int numFotos;
     int numCornersHor;
     int numCornersVer;
     int cornerSize;
-    int frame_width = argc < 3 ? 640 : stoi(argv[1]);
-    int frame_height = argc < 3 ? 480 : stoi(argv[2]);
     // Matrices importantes
     Mat cameraMatLeft = Mat::eye(3, 3, CV_64F);
     Mat cameraMatRight = Mat::eye(3, 3, CV_64F);
@@ -41,7 +84,7 @@ int main(int argc, char **argv){
     VideoCapture capRight(camDer);
     capRight.set(CV_CAP_PROP_FRAME_WIDTH, frame_width);
     capRight.set(CV_CAP_PROP_FRAME_HEIGHT, frame_height);
-    if(!capLeft.isOpened() || !capRight.isOpened()){ cout << "La camara no se pudo abrir" << endl; return -1;}
+    if(!capLeft.isOpened() || !capRight.isOpened()){ cout << "La camara no se pudo abrir" << endl; readme() ;return -1;}
     //Vectores que guardan los puntos en 3D y 2D correspondientes a las esquinas del chess en cada imagen
     vector<vector<Point3f> > objectPoints;
     vector<vector<Point2f> > imagePointsLeft, imagePointsRight;
@@ -79,13 +122,14 @@ int main(int argc, char **argv){
         int key = waitKey(1);
         // Si se pulsa ESC se saldra del programa
         if(key == 1048603)return 0;
-        // Si pulsamos espacio guardaremos la captura
-        if(key == 1048608 && foundLeft && foundRight){
+        // Si pulsamos espacio guardaremos la captura o si el programa esta en full_auto
+        if(foundLeft && foundRight && (key == 1048608 || full_auto)){
             imagePointsLeft.push_back(cornersLeft);
             imagePointsRight.push_back(cornersRight);
             objectPoints.push_back(obj);
             capturas++;
             cout << "Captura guardada!! (" << capturas << "/" << numFotos << ")" << endl;
+            if(full_auto) sleep(1);
         }
     }
     //Calibramos el conjunto bifocal

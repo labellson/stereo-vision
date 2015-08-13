@@ -12,4 +12,5 @@ set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x" )# --sysroot=${CMAKE_FIND_R
 add_subdirectory (calibrateStereo)
 add_subdirectory (stereo_matchSGBM)
 add_subdirectory (stereo_matchBM)
+add_subdirectory (stereo_matchBM_threads)
 add_subdirectory (lib)

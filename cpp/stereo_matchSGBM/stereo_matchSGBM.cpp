@@ -86,7 +86,7 @@ int main(int argc, char **argv){
         sgbm.disp12MaxDiff = disp12MaxDiff; //Diferencia maxima permitida en el check de disparidad. -1 desactiva el check
         sgbm.preFilterCap = preFilterCap;
         sgbm.speckleRange = speckleRange;
-        sgbm.fullDP = false;
+        sgbm.fullDP = true;
         //remap(image[0], imageU[0], calibData.map[0][0], calibData.map[0][1], INTER_LINEAR, BORDER_CONSTANT, Scalar());
         //remap(image[1], imageU[1], calibData.map[1][0], calibData.map[1][1], INTER_LINEAR, BORDER_CONSTANT, Scalar());
         remap(image[0], imageU[0], map1x, map1y, INTER_LINEAR, BORDER_CONSTANT, Scalar());
@@ -96,6 +96,7 @@ int main(int argc, char **argv){
         cvtColor(imageU[1], imageUG[1], CV_BGR2GRAY);
         //Calculo del mapa de disparidad
         sgbm(imageUG[0], imageUG[1], disp); //Tiene mas parametros
+        //sgbm(imageU[0], imageU[1], disp); //Tiene mas parametros
         //Es necesario normalizar el mapa de disparidad
         normalize(disp, disp8, 0, 255, CV_MINMAX, CV_8U);
         //Mat disp8roi(disp8, roi);
