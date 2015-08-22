@@ -142,7 +142,7 @@ int main(int argc, char **argv){
     Mat map1x, map1y, map2x, map2y;
     //Imagenes rectificadas y sin distorsion
     Mat imageU[2]; 
-    double sf = 600./MAX(imageLeft.size().width, imageLeft.size().height);
+    double sf = frame_width/MAX(imageLeft.size().width, imageLeft.size().height);
     int w = cvRound(imageLeft.size().width*sf), h = cvRound(imageLeft.size().height*sf);
     Mat canvas(h, w*2, CV_8UC3);
     initUndistortRectifyMap(cameraMatLeft, distCoefLeft, R1, P1, imageLeft.size(), CV_32FC1, map1x, map1y);

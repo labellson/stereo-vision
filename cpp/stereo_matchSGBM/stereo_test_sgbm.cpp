@@ -54,18 +54,19 @@ int main(int argc, char **argv){
     calibData.read(fs);
     fs.release();
 
-    VideoCapture cap1(camera1);
+    /*VideoCapture cap1(camera1);
     VideoCapture cap2(camera2);
     if(!(cap1.isOpened() || cap2.isOpened())) { cout << "ERROR! La camara no puso ser abierta" << endl; readme(); return -1; }
     cap1.set(CV_CAP_PROP_FRAME_WIDTH, calibData.frame_width);
     cap1.set(CV_CAP_PROP_FRAME_HEIGHT, calibData.frame_height);
     cap2.set(CV_CAP_PROP_FRAME_WIDTH, calibData.frame_width);
-    cap2.set(CV_CAP_PROP_FRAME_HEIGHT, calibData.frame_height);
+    cap2.set(CV_CAP_PROP_FRAME_HEIGHT, calibData.frame_height);*/
 
     Mat image[2], imageU[2], imageUG[2], disp, disp8;
     Mat map1x, map1y, map2x, map2y;
-    cap1 >> image[0];
-    int cn = image[0].channels();
+    //cap1 >> image[0];
+    //int cn = image[0].channels();
+    int cn = 3;
     StereoSGBM sgbm;
     //Parametros inicio
     /*sgbm.minDisparity = 0;
@@ -108,13 +109,17 @@ int main(int argc, char **argv){
     int roi_height = calibData.roi[0].height < calibData.roi[1].height ? calibData.roi[0].height : calibData.roi[1].height;
     Rect roi(roi_x, roi_y, roi_width, roi_height);
     //Se hara threshold para calcular el mapa binario
+    imageU[0] = imread("./capUL.png", CV_LOAD_IMAGE_COLOR);
+    imageU[1] = imread("./capUR.png", CV_LOAD_IMAGE_COLOR);
+    vector<double> tiempos;
+    bool count = false;
     while(go){
         double t = (double) getTickCount();
     Mat dispT, blobs;
-        if(rend){
+        /*if(rend){
             cap1 >> image[0];
             cap2 >> image[1];
-        }
+        }*/
         //Parametros SGBM
         sgbm.P1 = 8*cn*sad_window_size*sad_window_size;
         sgbm.P2 = 32*cn*sad_window_size*sad_window_size;
@@ -123,15 +128,16 @@ int main(int argc, char **argv){
         sgbm.speckleWindowSize = speckle_window_size;
         //Parametros de prueba
         sgbm.minDisparity = minDisparity;
-        sgbm.numberOfDisparities = ((image[0].size().width/8) + 15) & -16; //Probar variable
+        sgbm.numberOfDisparities = ((imageU[0].size().width/8) + 15) & -16; //Probar variable
+        cout << sgbm.numberOfDisparities<<endl;
         sgbm.disp12MaxDiff = disp12MaxDiff; //Diferencia maxima permitida en el check de disparidad. -1 desactiva el check
         sgbm.preFilterCap = preFilterCap;
         sgbm.speckleRange = speckleRange;
         sgbm.fullDP = true;
         //remap(image[0], imageU[0], calibData.map[0][0], calibData.map[0][1], INTER_LINEAR, BORDER_CONSTANT, Scalar());
         //remap(image[1], imageU[1], calibData.map[1][0], calibData.map[1][1], INTER_LINEAR, BORDER_CONSTANT, Scalar());
-        remap(image[0], imageU[0], map1x, map1y, INTER_LINEAR, BORDER_CONSTANT, Scalar());
-        remap(image[1], imageU[1], map2x, map2y, INTER_LINEAR, BORDER_CONSTANT, Scalar());
+        //remap(image[0], imageU[0], map1x, map1y, INTER_LINEAR, BORDER_CONSTANT, Scalar());
+        //remap(image[1], imageU[1], map2x, map2y, INTER_LINEAR, BORDER_CONSTANT, Scalar());
         //Cambiamos a escala de grises
         cvtColor(imageU[0], imageUG[0], CV_BGR2GRAY);
         cvtColor(imageU[1], imageUG[1], CV_BGR2GRAY);
@@ -141,33 +147,36 @@ int main(int argc, char **argv){
         //Es necesario normalizar el mapa de disparidad
         normalize(disp, disp8, 0, 255, CV_MINMAX, CV_8U);
         //Mat disp8roi(disp8, roi);
-        threshold(disp8, dispT, thresholdRange, 255, 0);
-        if(rend) calculate_blobs(dispT, blobs);
+        //threshold(disp8, dispT, thresholdRange, 255, 0);
+        //if(rend) calculate_blobs(dispT, blobs);
         imshow("Left", imageU[0]);
         imshow("Right", imageU[1]);
-        imshow("Mapa Binario", dispT);
+        //imshow("Mapa Binario", dispT);
         imshow("Disparidad", disp8);
-        if(rend) imshow("Blobs", blobs);
+        //if(rend) imshow("Blobs", blobs);
         switch (waitKey(1)){
             case 1048603:
                 go = false;
                 break;
             case 1048608:
-                imwrite("capL.png", image[0]); 
-                imwrite("capR.png", image[1]); 
-                imwrite("capUL.png", imageU[0]); 
-                imwrite("capUR.png", imageU[1]); 
-                imwrite("disp.png", disp8);
-                imwrite("dispT.png", dispT);
-                imwrite("blobs.png", blobs);
-                cout << "Captura izq y der guardada" << endl;
+                count = true; 
                 break;
             case 1048690:
                 rend = !rend;
                 break;
         }
-        if(rend) cout << "Tiempo ciclo: " << ((double)getTickCount() - t)/getTickFrequency() << "s" << endl;
+        double t_f = ((double)getTickCount() - t)/getTickFrequency();
+        if(rend) cout << "Tiempo ciclo: " << t_f  << "s" << endl;
+        if(count){
+            tiempos.push_back(t_f);
+            if(tiempos.size() >= 100) break;
+        }
     }
+    double sum=0;
+    int i;
+    for(i=0; i < tiempos.size(); i++)
+        sum+= tiempos[i];
+    cout << "Media " << sum/i << "s" << endl;
 }
 
 void calculate_blobs(Mat binary_map_src, Mat& dst){

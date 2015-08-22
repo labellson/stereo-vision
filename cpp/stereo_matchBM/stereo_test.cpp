@@ -152,7 +152,7 @@ int main(int argc, char **argv){
     calibData.read(fs);
     fs.release();
 
-    VideoCapture cap1(camera1);
+    /*VideoCapture cap1(camera1);
     VideoCapture cap2(camera2);
     if(!(cap1.isOpened() || cap2.isOpened())) { cout << "ERROR! La camara no puso ser abierta" << endl; readme(); return -1; }
     cap1.set(CV_CAP_PROP_FOURCC,CV_FOURCC('M','J','P','G'));
@@ -165,11 +165,11 @@ int main(int argc, char **argv){
     cap2.set(CV_CAP_PROP_FPS, 30);
     //cout << "FPS " << cap2.get(CV_CAP_PROP_FPS);
     cap2.set(CV_CAP_PROP_FRAME_WIDTH, calibData.frame_width);
-    cap2.set(CV_CAP_PROP_FRAME_HEIGHT, calibData.frame_height);
+    cap2.set(CV_CAP_PROP_FRAME_HEIGHT, calibData.frame_height);*/
 
     Mat imageU[2], imageUG[2], depth_map;
     Mat map1x, map1y, map2x, map2y;
-    cap1 >> image[0];
+    //cap1 >> image[0];
     StereoBM bm;
     bm.state->roi1 = calibData.roi[0];
     bm.state->roi2 = calibData.roi[1];
@@ -200,12 +200,16 @@ int main(int argc, char **argv){
     initUndistortRectifyMap(calibData.CM[1], calibData.D[1],calibData.r[1], calibData.P[1], image[0].size(), CV_32FC1, map2x, map2y);
     //Se hara threshold para calcular el mapa binario
     Mat dispT, blobs;//(480, 640, CV_8UC3);
+    imageU[0] = imread("capUL.png", CV_LOAD_IMAGE_COLOR);
+    imageU[1] = imread("capUR.png", CV_LOAD_IMAGE_COLOR);
+    vector<double> tiempos;
+    bool count = false;
     while(go){
         double t = (double) getTickCount();
-        if(rend){
+        /*if(rend){
             cap1 >> image[0];
             cap2 >> image[1];
-        }
+        }*/
         //Parametros BM
         bm.state->SADWindowSize = sadWindowsize;
         bm.state->numberOfDisparities = numberOfDisparities*16;
@@ -219,8 +223,8 @@ int main(int argc, char **argv){
         bm.state->disp12MaxDiff = disp12MaxDiff;
         
         //Hacemos remap
-        remap(image[0], imageU[0], map1x, map1y, INTER_LINEAR, BORDER_CONSTANT, Scalar());
-        remap(image[1], imageU[1], map2x, map2y, INTER_LINEAR, BORDER_CONSTANT, Scalar());
+        //remap(image[0], imageU[0], map1x, map1y, INTER_LINEAR, BORDER_CONSTANT, Scalar());
+        //remap(image[1], imageU[1], map2x, map2y, INTER_LINEAR, BORDER_CONSTANT, Scalar());
         //Cambiamos a escala de grises
         cvtColor(imageU[0], imageUG[0], CV_BGR2GRAY);
         cvtColor(imageU[1], imageUG[1], CV_BGR2GRAY);
@@ -228,7 +232,7 @@ int main(int argc, char **argv){
         bm(imageUG[0], imageUG[1], disp, CV_32F); //Tiene mas parametros
         //Es necesario normalizar el mapa de disparidad
         normalize(disp, disp8, 0, 255, CV_MINMAX, CV_8U);
-        threshold(disp8, dispT, thresholdRange, 255, 0);
+        /*threshold(disp8, dispT, thresholdRange, 255, 0);
 
         vector<Rect> objects;
         if(rend) calculate_blobs(dispT, objects, blobs, min_blob_area);
@@ -237,27 +241,19 @@ int main(int argc, char **argv){
         //TODO: Cambiar esto por algo mas logico y eficiente
         //if(DEBUG) reprojectImageTo3D(disp, depth_map, calibData.Q);
 
-        if(rend) calculate_depth(disp, disp8, blobs, objects);
+        if(rend) calculate_depth(disp, disp8, blobs, objects);*/
 
         imshow("Left", imageU[0]);
         imshow("Right", imageU[1]);
-        imshow("Mapa Binario", dispT);
+        //imshow("Mapa Binario", dispT);
         imshow(disparityWindow, disp8);
-        imshow("Blobs", blobs);
+        //imshow("Blobs", blobs);
         switch (waitKey(1)){
             case 1048603:
                 go = false;
                 break;
             case 1048608:
-                imwrite("capL.png", image[0]); 
-                imwrite("capR.png", image[1]); 
-                imwrite("capUL.png", imageU[0]); 
-                imwrite("capUR.png", imageU[1]); 
-                imwrite("disp.png", disp8);
-                imwrite("dispT.png", dispT);
-                imwrite("blobs.png", blobs);
-                cout << "Captura izq y der guardada" << endl;
-                break;
+                count = true;
             case 1048690:
                 rend = !rend;
                 break;
@@ -278,8 +274,19 @@ int main(int argc, char **argv){
             default:
                 break;
         }
-    if(rend) cout << "Tiempo ciclo: " << ((double)getTickCount() - t)/getTickFrequency() << "s" << endl;
+        double t_f =  ((double)getTickCount() - t)/getTickFrequency(); 
+    if(rend) cout << "Tiempo ciclo: " << t_f << "s" << endl;
+    if(count){
+        tiempos.push_back(t_f);
+        if(tiempos.size() >= 100) break;
     }
+    }
+    double sum = 0;
+    int i;
+    for(i=0; i < tiempos.size(); i++){
+        sum += tiempos[i];
+    }
+    cout << "Media " << sum/i << "s" << endl;
 }
 
 void calculate_blobs(Mat binary_map_src, vector<Rect> &objects, Mat& dst, int min_area){
