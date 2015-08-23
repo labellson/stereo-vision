@@ -272,6 +272,9 @@ int main(int argc, char **argv){
 					imshow(blobWindow, blobs1);
 					}
 				}
+                //Necesario limpiar esta parte de la memoria, para evitar memory leaks
+                delete[] proc_par;
+                delete[] disp_array;
 				#pragma omp critical(tick)
 				{
 				cout << "Tiempo ciclo: " << ((double)getTickCount() - t)/getTickFrequency() << "s" << endl;
