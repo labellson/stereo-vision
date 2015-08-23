@@ -155,14 +155,14 @@ int main(int argc, char **argv){
     VideoCapture cap1(camera1);
     VideoCapture cap2(camera2);
     if(!(cap1.isOpened() || cap2.isOpened())) { cout << "ERROR! La camara no puso ser abierta" << endl; readme(); return -1; }
-    cap1.set(CV_CAP_PROP_FOURCC,CV_FOURCC('M','J','P','G'));
-    cout << "FOURCC " << cap1.get(CV_CAP_PROP_FOURCC) << endl;
-    cap1.set(CV_CAP_PROP_FPS, 30);
+    //cap1.set(CV_CAP_PROP_FOURCC,CV_FOURCC('M','J','P','G'));
+    //cout << "FOURCC " << cap1.get(CV_CAP_PROP_FOURCC) << endl;
+    //cap1.set(CV_CAP_PROP_FPS, 30);
     //cout << "FPS " << cap1.get(CV_CAP_PROP_FPS);
     cap1.set(CV_CAP_PROP_FRAME_WIDTH, calibData.frame_width);
     cap1.set(CV_CAP_PROP_FRAME_HEIGHT, calibData.frame_height);
-    cap2.set(CV_CAP_PROP_FOURCC,CV_FOURCC('M','J','P','G'));
-    cap2.set(CV_CAP_PROP_FPS, 30);
+    //cap2.set(CV_CAP_PROP_FOURCC,CV_FOURCC('M','J','P','G'));
+    //cap2.set(CV_CAP_PROP_FPS, 30);
     //cout << "FPS " << cap2.get(CV_CAP_PROP_FPS);
     cap2.set(CV_CAP_PROP_FRAME_WIDTH, calibData.frame_width);
     cap2.set(CV_CAP_PROP_FRAME_HEIGHT, calibData.frame_height);

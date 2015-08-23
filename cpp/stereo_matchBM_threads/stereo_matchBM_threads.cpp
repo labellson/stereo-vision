@@ -56,6 +56,28 @@ bool minDisparityNeg = false;
 //Parametros ajuste Blobs
 int min_blob_area = 80;
 
+//Nombre Argumentos
+String calib_filename_arg = "-c";
+String distance_method_arg = "-d";
+
+//Argumentos del programa
+int camera1, camera2;
+String calib_filename = "stereo_calib.yml";
+int distance_method = 1;
+
+void args(int argc, char **argv){
+    camera1 = stoi(argv[1]); camera2 = stoi(argv[2]);
+    for(int i=3; i < argc; i++){
+        if(calib_filename_arg.compare(argv[i]) == 0){
+            i++; calib_filename = argv[i];
+        }else if(distance_method_arg.compare(argv[i]) == 0){
+            i++; distance_method = stoi(argv[i]);
+        }
+    }
+}
+
+
+
 //Funciones de callback
 void sad_window_size_callback(int v, void*){
     if(v % 2 == 0){
@@ -88,8 +110,12 @@ static void disp_window_mouse_callback(int event, int x, int y, int flags, void*
 // disp_src Matriz de disparidad thresholdeada, dst matriz de destino
 void calculate_blobs(Mat binary_map_src, vector<Rect> &objects, Mat& dst, int min_area=80);
 
+double media(Mat roi);
+
+double moda(Mat roi, Mat roi8);
+
 //Calculara la distancia a los objetos y la mostrara
-void calculate_depth(Mat disp, Mat &dst, vector<Rect> objects);
+void calculate_depth(Mat disp, Mat disp8, Mat &dst, vector<Rect> objects);
 
 //Hara el preprocesado de la imagen, una vez capturada
 void pre_proccess_images(Mat &image0, Mat &image1);
@@ -99,7 +125,7 @@ void get_disparity_map(Mat *imageUG);
 
 //Leeme: Hay que meter 2 argumentos que seran los numeros de las camaras
 void readme(){
-    cout << "Uso: ./stereo_matchBM <camera0> <camera1> <calib_file>" << endl;
+    cout << "Uso: ./stereo_matchBM <camera0> <camera1> [-c calib_file] [-d 1|2]" << endl;
 }
 
 int main(int argc, char **argv){
@@ -109,17 +135,19 @@ int main(int argc, char **argv){
     image = new Mat[2];
     imageU = new Mat[2];
 
-    if(argc < 4){ readme(); return -1; }
+    if(argc < 3){ readme(); return -1; }
 
-    FileStorage fs(argv[3], FileStorage::READ);
-    if(!fs.isOpened()) { cout << "ERROR! El fichero de calibracion no se pudo abrir" << endl; return -1; }
+    args(argc, argv);
+
+    FileStorage fs(calib_filename, FileStorage::READ);
+    if(!fs.isOpened()) { cout << "ERROR! El fichero de calibracion no se pudo abrir" << endl; readme(); return -1; }
     calibData.read(fs);
     fs.release();
 
     //Inicializacion
-    VideoCapture cap1(stoi(argv[1]));
-    VideoCapture cap2(stoi(argv[2]));
-    if(!(cap1.isOpened() || cap2.isOpened())) { cout << "ERROR! La camara no puso ser abierta" << endl; return -1; }
+    VideoCapture cap1(camera1);
+    VideoCapture cap2(camera2);
+    if(!(cap1.isOpened() || cap2.isOpened())) { cout << "ERROR! La camara no puso ser abierta" << endl; readme(); return -1; }
     cap1.set(CV_CAP_PROP_FRAME_WIDTH, calibData.frame_width);
     cap1.set(CV_CAP_PROP_FRAME_HEIGHT, calibData.frame_height);
     cap2.set(CV_CAP_PROP_FRAME_WIDTH, calibData.frame_width);
@@ -203,6 +231,7 @@ int main(int argc, char **argv){
             bool empty;
             #pragma omp critical(pre_proccess_buff)
             {
+            //Se vuelve a mirar si el buffer tiene imagenes, para evitar falsos positivos
             empty = pre_proccess_buff.empty();
             if(!empty){
                 proc_par = pre_proccess_buff.front();
@@ -231,7 +260,7 @@ int main(int argc, char **argv){
 				//TODO: Cambiar esto por algo mas logico y eficiente
 				if(DEBUG) reprojectImageTo3D(disp_array[0], depth_map, calibData.Q);
 
-				if(rend) calculate_depth(disp_array[0], blobs1, objects);
+				if(rend) calculate_depth(disp_array[0], disp_array[1], blobs1, objects);
 
 				if(rend){
 					#pragma omp critical(window)
@@ -304,7 +333,77 @@ void calculate_blobs(Mat binary_map_src, vector<Rect> &objects, Mat& dst, int mi
     }
 }
 
-void calculate_depth(Mat disp, Mat &dst, vector<Rect> objects){
+double media(Mat roi){
+    Mat depth;
+    vector<Mat> depthC;
+    reprojectImageTo3D(roi, depth, calibData.Q);
+    split(depth, depthC);
+    float *p; 
+    double sum=0;
+    int cont =0;
+    for(int k=0;  k < depthC[2].rows; k++){
+        p = depthC[2].ptr<float>(k);
+        for(int j=0; j < depthC[2].cols; j++){
+            if(p[j] > 0){
+                sum += p[j];
+                cont++;
+            }
+        }
+    }
+    return sum/cont;
+}
+
+double moda(Mat roi, Mat roi8){
+    Mat hist, depth;
+    int histSize = 255;
+    float range[] = {1, 256};
+    const float *histRange = {range};
+    calcHist(&roi8, 1, 0, cv::Mat(), hist, 1, &histSize, &histRange);
+    Point max_loc;
+    minMaxLoc(hist, NULL, NULL, NULL, &max_loc);
+    
+    uchar *p;
+    int x,y;
+    bool found = false;
+    for(int k=0; k < roi8.rows; k++){
+        p = roi8.ptr<uchar>(k);
+        for(int j=0; j < roi8.cols; j++){
+            if(p[j] == max_loc.y+1) { 
+                x=j;
+                y=k;
+                found=true;
+                break;
+            }
+        }
+        if(found) break;
+    }
+    
+    //Conseguimos la disparidad de la moda
+    Mat rep_roi(roi, Rect(Point(x,y), Size(1,1)));
+    reprojectImageTo3D(rep_roi, depth, calibData.Q);
+    return depth.at<Vec3f>(0,0)[2];
+}
+
+void calculate_depth(Mat disp, Mat disp8, Mat &dst, vector<Rect> objects){
+    Mat depth;
+    vector<Mat> depthC;
+    double distance;
+    for(int i=0; i < objects.size(); i++){
+        Mat roi(disp, objects[i]);
+
+        if(distance_method == 1){
+            distance = media(roi);
+        }else{
+            //Se calcula el histograma para ver cual se repit mas
+            Mat roi8(disp8, objects[i]);
+            distance = moda(roi, roi8); 
+        }
+
+        Point anchor(objects[i].x+10, objects[i].y+18);
+        putText(dst, to_string(distance/1000), anchor, FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255,255,255));
+    }
+}
+/*void calculate_depth(Mat disp, Mat &dst, vector<Rect> objects){
     Mat depth;
     vector<Mat> depthC;
     Vec3f vec;
@@ -328,7 +427,7 @@ void calculate_depth(Mat disp, Mat &dst, vector<Rect> objects){
         Point anchor(objects[i].x+10, objects[i].y+18);
         putText(dst, to_string(sum/cont/1000), anchor, FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255,255,255));
     }
-}
+}*/
 
 void pre_proccess_images(Mat &image0, Mat &image1){
     Mat *imageP = new Mat[2];
