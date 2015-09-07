@@ -26,7 +26,6 @@ queue<Mat*> pre_proccess_buff, disp_buff;
 //Variables importante
 Mat *image, *imageU, depth_map;
 Mat map1x, map1y, map2x, map2y;
-StereoBM bm;
 
 //Strings Trackbars y WinNames
 String trackWindow = "Settings", disparityWindow = "Disparidad";
@@ -41,7 +40,7 @@ SCalibData calibData;
 
 //Parametros de ajuste BM
 int sadWindowsize = 9, sadWindowsize_tmp = sadWindowsize;
-int numberOfDisparities = 7;
+int numberOfDisparities = 3;
 int preFilterSize = 5, preFilterSize_tmp = preFilterSize;
 int preFilterCap = 31;
 int minDisparity = 0;
@@ -59,24 +58,70 @@ int min_blob_area = 80;
 //Nombre Argumentos
 String calib_filename_arg = "-c";
 String distance_method_arg = "-d";
+String num_tasks_arg = "-t";
+String test_mode_arg = "--test";
+String load_image_arg = "-l";
+String help_arg = "-h";
 
 //Argumentos del programa
 int camera1, camera2;
-String calib_filename = "stereo_calib.yml";
+int num_tasks = 3;
+bool cam1_init = false, cam2_init = false;
+String calib_filename = "stereo_calib.yml", load_image[2];
 int distance_method = 1;
+bool test_mode = false, image_mode = false, silent_mode = true;
+
+//Leeme: Hay que meter 2 argumentos que seran los numeros de las camaras
+void readme(){
+    cout << "Uso: ./stereo_matchBM_threads <camera0> <camera1> [-l image0 image1] [-c calib_file] [-t n][-d 1|2] [--test] [-h]" << endl;
+    cout << "For help use: -h" <<endl;
+    exit(-1);
+}
+
+void man(){
+    cout << endl << "Este programa multi-hilo calcula un mapa de disparidad utilizando el algoritmo Block Match, detecta los blobs de la imagen utilizando un threshold del mapa de disparidad, y estima sus distancias." << endl;
+    cout << "Cuando el programa este ejecutado, puedes pulsar la tecla r para parar la grabacion de las camaras, pulsar m para cambiar entre valores negativos o positivos del minimo de disparidad, puedes cambiar el metodo de distancias pulsando d, o hacer una captura de las camaras pulsando la barra espaciadora." << endl << "Para desactivar el modo silencioso, y que se muestre por pantalla el tiempo de cada ciclo pulsa la tecla s."<< endl;
+    cout << endl << "USO:" << endl;
+    cout << endl << "\t./stereo_matchBM_threads <camera0> <camera1> [-l image0 image1] [-c calib_file] [-t n][-d 1|2] [--test] [-h]" << endl;
+    cout << endl << "OPCIONES" << endl;
+    cout << endl << "\t-t\tNumero de tasks que ejecutara el programa" << endl;
+    cout << endl << "\t-l <image0> <image1>\tCarga las dos siguientes imagenes que se indiquen, en vez de inicializar las camaras. Es necesario indicar el fichero de calibracion correspondiente a las imagenes" << endl;
+    cout << endl << "\t-c <calib_file>\tRuta al fichero de calibracion" << endl;
+    cout << endl << "\t-d <1|2>\tCambia el modo de calculo de distancia. 1 media, 2 moda. Por defecto el 1" << endl;
+    cout << endl << "\t--test\tActiva el modo test. Cuando se vaya a salir del programa, este no saldra inmediatamente, sino que ejecutara 100 ciclos, y guardara el tiempo de cada uno para hacer un promedio" << endl;
+    cout << endl << "\t-h\timprime este mensaje por pantalla" << endl;
+    exit(0);
+}
 
 void args(int argc, char **argv){
-    camera1 = stoi(argv[1]); camera2 = stoi(argv[2]);
-    for(int i=3; i < argc; i++){
-        if(calib_filename_arg.compare(argv[i]) == 0){
+    for(int i=1; i < argc; i++){
+        if(argv[i][0] != '-' && !image_mode){
+            if(!cam1_init){ camera1 = stoi(argv[i]); cam1_init = true; }
+            else { camera2 = stoi(argv[i]); cam2_init = true; }
+        }else if(calib_filename_arg.compare(argv[i]) == 0){
             i++; calib_filename = argv[i];
         }else if(distance_method_arg.compare(argv[i]) == 0){
             i++; distance_method = stoi(argv[i]);
+        }else if(test_mode_arg.compare(argv[i]) == 0){
+            test_mode = true;
+        }else if(help_arg.compare(argv[i]) == 0){
+            man();
+        }else if(num_tasks_arg.compare(argv[i]) == 0){
+            i++; num_tasks = stoi(argv[i]);
+        }else if(load_image_arg.compare(argv[i]) == 0){
+            i++;  
+            if(argc - i > 1){ 
+                load_image[0] = argv[i++];
+                load_image[1] = argv[i];
+                image_mode = true;
+            }else{
+                readme();
+            }
         }
     }
+
+    if(!image_mode && (!cam2_init | !cam1_init)) readme();
 }
-
-
 
 //Funciones de callback
 void sad_window_size_callback(int v, void*){
@@ -123,11 +168,6 @@ void pre_proccess_images(Mat &image0, Mat &image1);
 //Calcula el mapa de Disparidad
 void get_disparity_map(Mat *imageUG);
 
-//Leeme: Hay que meter 2 argumentos que seran los numeros de las camaras
-void readme(){
-    cout << "Uso: ./stereo_matchBM <camera0> <camera1> [-c calib_file] [-d 1|2]" << endl;
-}
-
 int main(int argc, char **argv){
     //Pulsar r para resumir la captura de video
     bool rend =  true, go = true;
@@ -135,27 +175,33 @@ int main(int argc, char **argv){
     image = new Mat[2];
     imageU = new Mat[2];
 
-    if(argc < 3){ readme(); return -1; }
-
     args(argc, argv);
+
+    cout << "Numero de Tasks: " << num_tasks <<endl;
 
     FileStorage fs(calib_filename, FileStorage::READ);
     if(!fs.isOpened()) { cout << "ERROR! El fichero de calibracion no se pudo abrir" << endl; readme(); return -1; }
     calibData.read(fs);
     fs.release();
 
-    //Inicializacion
-    VideoCapture cap1(camera1);
-    VideoCapture cap2(camera2);
-    if(!(cap1.isOpened() || cap2.isOpened())) { cout << "ERROR! La camara no puso ser abierta" << endl; readme(); return -1; }
-    cap1.set(CV_CAP_PROP_FRAME_WIDTH, calibData.frame_width);
-    cap1.set(CV_CAP_PROP_FRAME_HEIGHT, calibData.frame_height);
-    cap2.set(CV_CAP_PROP_FRAME_WIDTH, calibData.frame_width);
-    cap2.set(CV_CAP_PROP_FRAME_HEIGHT, calibData.frame_height);
+    VideoCapture cap1;
+    VideoCapture cap2;
+    if(!image_mode){
+        //Inicializacion
+        cap1 = VideoCapture(camera1);
+        cap2 = VideoCapture(camera2);
+        if(!(cap1.isOpened() || cap2.isOpened())) { cout << "ERROR! La camara no puso ser abierta" << endl; readme(); return -1; }
+        cap1.set(CV_CAP_PROP_FRAME_WIDTH, calibData.frame_width);
+        cap1.set(CV_CAP_PROP_FRAME_HEIGHT, calibData.frame_height);
+        cap2.set(CV_CAP_PROP_FRAME_WIDTH, calibData.frame_width);
+        cap2.set(CV_CAP_PROP_FRAME_HEIGHT, calibData.frame_height);
 
-    cap1 >> image[0];
-    bm.state->roi1 = calibData.roi[0];
-    bm.state->roi2 = calibData.roi[1];
+        cap1 >> image[0];
+        
+        //Rectificar camara
+        initUndistortRectifyMap(calibData.CM[0], calibData.D[0],calibData.r[0], calibData.P[0], image[0].size(), CV_32FC1, map1x, map1y);
+        initUndistortRectifyMap(calibData.CM[1], calibData.D[1],calibData.r[1], calibData.P[1], image[0].size(), CV_32FC1, map2x, map2y);
+    }
 
     cout << "Para Min Disparity sea negativo pulsa m" << endl;
 
@@ -182,11 +228,19 @@ int main(int argc, char **argv){
     //Callbacks
     if(DEBUG) setMouseCallback(disparityWindow, disp_window_mouse_callback, &depth_map);
 
-    //Rectificar camara
-    initUndistortRectifyMap(calibData.CM[0], calibData.D[0],calibData.r[0], calibData.P[0], image[0].size(), CV_32FC1, map1x, map1y);
-    initUndistortRectifyMap(calibData.CM[1], calibData.D[1],calibData.r[1], calibData.P[1], image[0].size(), CV_32FC1, map2x, map2y);
     //Se hara threshold para calcular el mapa binario
     Mat blobs;//(480, 640, CV_8UC3);
+    
+    //Si image_mode= true se cargan las imagenes
+    if(image_mode){
+        imageU[0] = imread(load_image[0]);
+        imageU[1] = imread(load_image[1]);
+    }
+    
+    //Variables modo test
+    vector<double> tiempos;
+    bool count = false;
+
     double t;
     int threads = 0; //threads maximos calculando disparidades 3
     #pragma omp parallel shared(pre_proccess_buff, disp_buff, t, go, rend), num_threads(4)
@@ -194,25 +248,16 @@ int main(int argc, char **argv){
         #pragma omp single nowait
         {
         while(go){
-            //Parametros BM
-            bm.state->SADWindowSize = sadWindowsize;
-            bm.state->numberOfDisparities = numberOfDisparities*16;
-            bm.state->preFilterSize = preFilterSize;
-            bm.state->preFilterCap = preFilterCap;
-            bm.state->minDisparity = minDisparityNeg ? -1*minDisparity : minDisparity;
-            bm.state->textureThreshold = textureThreshold;
-            bm.state->uniquenessRatio = uniqnessRatio;
-            bm.state->speckleWindowSize = speckleWindowSize;
-            bm.state->speckleRange = speckleRange;
-            bm.state->disp12MaxDiff = disp12MaxDiff;
-
+            
             //Captura de las imagenes
-            if(rend && pre_proccess_buff.size() < 4){
+            if(rend && pre_proccess_buff.size() < num_tasks+2 && !image_mode){
                 cap1 >> image[0];
                 cap2 >> image[1];
 
                 //Rectificado y preprocesado de las imagenes
                 pre_proccess_images(image[0], image[1]);
+            }else{
+                pre_proccess_images(imageU[0], imageU[1]);
             }
         }
         }
@@ -221,7 +266,7 @@ int main(int argc, char **argv){
         {
         while(go){
         //Si la cola esta vacia, es que es la primera ejecucion
-        if(!pre_proccess_buff.empty() && threads < 3){
+        if(!pre_proccess_buff.empty() && threads < num_tasks){
             #pragma omp task
             {
             #pragma omp atomic
@@ -277,7 +322,14 @@ int main(int argc, char **argv){
                 delete[] disp_array;
 				#pragma omp critical(tick)
 				{
-				cout << "Tiempo ciclo: " << ((double)getTickCount() - t)/getTickFrequency() << "s" << endl;
+                //Guardar tiempos para el modo test
+                double t_f =  ((double)getTickCount() - t)/getTickFrequency(); 
+                if(rend && !silent_mode) cout << "Tiempo ciclo: " << t_f << "s" << endl;
+
+                if(count){
+                tiempos.push_back(t_f);
+                if(tiempos.size() >= 100) go=false;
+                }
 				t = (double) getTickCount();
                 }
             }
@@ -287,12 +339,28 @@ int main(int argc, char **argv){
         }
         switch (waitKey(1)){
             case 1048603:
-                go = false;
+                if(!test_mode) go = false;
+                else count = true;
                 break;
             case 1048608:
-                imwrite("capL.png", imageU[0]); 
-                imwrite("capR.png", imageU[1]); 
+                imwrite("capL.png", image[0]); 
+                imwrite("capR.png", image[1]); 
+                imwrite("capUL.png", imageU[0]); 
+                imwrite("capUR.png", imageU[1]); 
+                imwrite("blobs.png", blobs);
                 cout << "Captura izq y der guardada" << endl;
+                break;
+            case 1048691: //silent
+                silent_mode = !silent_mode;
+                break;
+            case 1048676:
+                if(distance_method == 1){
+                    distance_method = 2;
+                    cout << "Metodo de distancia Moda" << endl;
+                }else{
+                    distance_method = 1;
+                    cout << "Metodo de distancia Media" << endl;
+                }
                 break;
             case 1048690:
                 rend = !rend;
@@ -308,6 +376,14 @@ int main(int argc, char **argv){
         }
         }
     }
+    
+    //Hacer la media para el modo test
+    double sum = 0;
+    int i;
+    for(i=0; i < tiempos.size(); i++){
+        sum += tiempos[i];
+    }
+    if(test_mode) cout << "Media " << sum/i << "s" << endl;
 }
 
 void calculate_blobs(Mat binary_map_src, vector<Rect> &objects, Mat& dst, int min_area){
@@ -436,9 +512,11 @@ void pre_proccess_images(Mat &image0, Mat &image1){
     Mat *imageP = new Mat[2];
     
     //Hacemos remap
-    remap(image0, imageU[0], map1x, map1y, INTER_LINEAR, BORDER_CONSTANT, Scalar());
+    if(!image_mode){
+        remap(image0, imageU[0], map1x, map1y, INTER_LINEAR, BORDER_CONSTANT, Scalar());
+        remap(image1, imageU[1], map2x, map2y, INTER_LINEAR, BORDER_CONSTANT, Scalar());
+    }
     imageP[0] = imageU[0];
-    remap(image1, imageU[1], map2x, map2y, INTER_LINEAR, BORDER_CONSTANT, Scalar());
     imageP[1] = imageU[1];
 
     //Cambiamos a escala de grises
@@ -453,11 +531,26 @@ void pre_proccess_images(Mat &image0, Mat &image1){
 }
 
 void get_disparity_map(Mat* imageUG){
+    StereoBM bm;
+    //Parametros BM
+    bm.state->SADWindowSize = sadWindowsize;
+    bm.state->numberOfDisparities = numberOfDisparities*16;
+    bm.state->preFilterSize = preFilterSize;
+    bm.state->preFilterCap = preFilterCap;
+    bm.state->minDisparity = minDisparityNeg ? -1*minDisparity : minDisparity;
+    bm.state->textureThreshold = textureThreshold;
+    bm.state->uniquenessRatio = uniqnessRatio;
+    bm.state->speckleWindowSize = speckleWindowSize;
+    bm.state->speckleRange = speckleRange;
+    bm.state->disp12MaxDiff = disp12MaxDiff;
+    bm.state->roi1 = calibData.roi[0];
+    bm.state->roi2 = calibData.roi[1];
+
     Mat disp, disp8, dispT;
     Mat *disparidades = new Mat[3];
     
     //Calculo del mapa de disparidad
-	#pragma omp critical(bm)
+	//#pragma omp critical(bm)
     bm(imageUG[0], imageUG[1], disp, CV_32F); //Tiene mas parametros
     disparidades[0] = disp;
     

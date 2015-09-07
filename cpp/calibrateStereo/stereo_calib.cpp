@@ -27,8 +27,12 @@ void readme(){
 }
 
 void man(){
-    cout << "Este programa calibra un sistema estereo, utilizando un tablero de ajedrez" << endl << endl;
-    cout << "\t-a" << endl << "\t\tActiva el modo automatico para capturar esquinas" << endl;
+    cout << endl << "Este programa calibra un sistema estereo, utilizando un tablero de ajedrez. El fichero de calibracion se guardara en el mismo directorio del programa, con el nombre stereo_calib_<height>.yml" << endl << "Cuando se detecten las esquinas del tablero, pulsa la barra espaciadora para guardar esa captura."<< endl << "Cuando las camaras esten calibradas, pulsa r para parar la grabacion de las camaras, y comprobar si el sistema se ha calibrado bien. Tambien podras pulsar la barra espaciadora para guardar los resultados.";
+    cout << endl << endl << "USO:" << endl << endl;
+    cout << "\tstereo_calib [width] [height] [-a]";
+    cout << endl << endl << "OPCIONES:" << endl << endl;
+    cout << "\t-a\tActiva el modo automatico para capturar esquinas" << endl;
+    cout << "\t-h\tMuestra la ayuda del programa" << endl;
     exit(0);
 }
 
@@ -152,9 +156,12 @@ int main(int argc, char **argv){
     SCalibData calibData(cameraMatLeft, cameraMatRight, distCoefLeft, distCoefRight, R, T, E, F, R1, R2, P1, P2, Q, roi[0], roi[1], frame_width, frame_height);
     calibData.write(fs);
     fs.release();
-    while(true){
-        capLeft >> imageLeft;
-        capRight >> imageRight;
+    bool rend = true, go = true;
+    while(go){
+        if(rend){
+            capLeft >> imageLeft;
+            capRight >> imageRight;
+        }
         remap(imageLeft, imageU[0], map1x, map1y, INTER_LINEAR, BORDER_CONSTANT, Scalar());
         remap(imageRight, imageU[1], map2x, map2y, INTER_LINEAR, BORDER_CONSTANT, Scalar());
         for( int k=0; k < 2; k++){
@@ -170,7 +177,19 @@ int main(int argc, char **argv){
         imshow("Rectificado", canvas);
         //imshow("LeftU", imageU[0]);
         //imshow("RightU", imageU[1]);
-        if(waitKey(1) == 1048603) break;
+        switch(waitKey(1)){
+            case 1048603:
+                go = false;
+                break;
+            case 1048690:
+                rend = !rend;
+                break;
+            case 1048608:
+                imwrite("canvas.png", canvas);
+                imwrite("img_l.png", imageLeft);
+                imwrite("img_r.png", imageRight);
+                break;
+        }
     }
     return 0;
 }

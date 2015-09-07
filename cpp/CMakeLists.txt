@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 2.8.11)
 set( CMAKE_EXPORT_COMPILE_COMMANDS ON )
 set( CMAKE_BUILD_TYPE DEBUG )
 set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x" )# --sysroot=${CMAKE_FIND_ROOT_PATH}" )
@@ -10,7 +10,9 @@ set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x" )# --sysroot=${CMAKE_FIND_R
 #    $ENV{HOME}/Rasp/root/usr/local/lib
 #)   
 add_subdirectory (calibrateStereo)
+add_subdirectory (SurfObjectDetector)
 add_subdirectory (stereo_matchSGBM)
 add_subdirectory (stereo_matchBM)
 add_subdirectory (stereo_matchBM_threads)
 add_subdirectory (lib)
+add_subdirectory (VideoCapture)
