@@ -118,6 +118,7 @@ int main(int argc, char **argv){
     }
 
     int cn = !image_mode ? image[0].channels() : imageU[0].channels();
+    int image_width = !image_mode ? image[0].size().width : imageU[0].size().width;
     StereoSGBM sgbm;
     //Parametros inicio
     /*sgbm.minDisparity = 0;
@@ -176,7 +177,7 @@ int main(int argc, char **argv){
         sgbm.speckleWindowSize = speckle_window_size;
         //Parametros de prueba
         sgbm.minDisparity = minDisparity;
-        sgbm.numberOfDisparities = ((imageU[0].size().width/8) + 15) & -16; //Probar variable
+        sgbm.numberOfDisparities = ((image_width/8) + 15) & -16; //Probar variable
         sgbm.disp12MaxDiff = disp12MaxDiff; //Diferencia maxima permitida en el check de disparidad. -1 desactiva el check
         sgbm.preFilterCap = preFilterCap;
         sgbm.speckleRange = speckleRange;
