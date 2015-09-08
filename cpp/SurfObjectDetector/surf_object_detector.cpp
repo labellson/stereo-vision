@@ -138,7 +138,7 @@ int main(int argc, char** argv){
 }
 
 void readme(){
-    cout << "USO: ./feature_detector [-bw] [-c camera] [-m min_matches]" << endl;
+    cout << "USO: ./surf_object_detector [-bw] [-c camera] [-m min_matches]" << endl;
     exit(-1);
 }
 
@@ -209,7 +209,7 @@ void args(int argc, char **argv){
 void man(){
     cout << endl << "Este programa hace uso del algoritmo de correspondencia discreta SURF." << endl << "Mientras el programa este en ejecucion selecciona una porcion de la ventana con el raton, para elegir donde aplicar el algoritmo." << endl << "Podras pausar la captura con r, y tomar una captura con la barra espaciadora" << endl;
     cout << endl << "USO:" << endl;
-    cout << endl << "\t./feature_detector [-bw] [-c camera] [-m min_matches]" <<endl;
+    cout << endl << "\t./surf_object_detector [-bw] [-c camera] [-m min_matches]" <<endl;
     cout << endl << "OPCIONES" << endl;
     cout << endl << "\t-c <camera>\tElige la camara a utilizar." << endl;
     cout << endl << "\t-m <min_matches>\tElige el numero de matches necesario para dibujar el objeto" << endl;
