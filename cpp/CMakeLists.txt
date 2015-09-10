@@ -12,8 +12,12 @@ endif()
 #    $ENV{HOME}/Rasp/root/usr/lib
 #    $ENV{HOME}/Rasp/root/usr/local/lib
 #)   
+find_package(OpenCV)
+
 add_subdirectory (calibrateStereo)
-add_subdirectory (SurfObjectDetector)
+if(OPENCV_NONFREE_FOUND)
+    add_subdirectory (SurfObjectDetector)
+endif()
 add_subdirectory (stereo_matchSGBM)
 add_subdirectory (stereo_matchBM)
 add_subdirectory (stereo_matchBM_threads)
